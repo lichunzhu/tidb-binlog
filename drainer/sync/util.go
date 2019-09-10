@@ -63,7 +63,9 @@ func (b *baseError) error() <-chan error {
 		for {
 			select {
 			case <-b.errCh:
+				log.Info("sending error to ret: " + b.err.Error())
 				ret <- b.err
+				log.Info("get error: " + b.err.Error())
 				return
 			case <-time.After(time.Second * 5):
 				log.Info("Waiting for error occurs")

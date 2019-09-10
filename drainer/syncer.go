@@ -189,6 +189,7 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 			saveNow   = false
 			appliedTS int64
 		)
+		log.Info("looping in handleSuccess")
 
 		select {
 		case item, ok := <-successes:
@@ -218,6 +219,8 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 			if ts > atomic.LoadInt64(lastTS) {
 				atomic.StoreInt64(lastTS, ts)
 			}
+		case <-time.After(5 * time.Second):
+			log.Info("haven't get msg for 5s")
 		}
 
 		ts := atomic.LoadInt64(lastTS)
@@ -298,8 +301,10 @@ ForLoop:
 
 		select {
 		case err = <-dsyncError:
+			log.Error("get dsyncError" + err.Error())
 			break ForLoop
 		case <-s.shutdown:
+			log.Info("breaking shutdown")
 			break ForLoop
 		case pushFakeBinlog <- fakeBinlog:
 			pushFakeBinlog = nil
@@ -308,6 +313,8 @@ ForLoop:
 			queueSizeGauge.WithLabelValues("syncer_input").Set(float64(len(s.input)))
 			log.Debug("consume binlog item", zap.Stringer("item", b))
 		}
+
+		log.Info("syncer is syncing binlogs after select")
 
 		binlog := b.binlog
 		startTS := binlog.GetStartTs()
@@ -328,12 +335,14 @@ ForLoop:
 			err = preWrite.Unmarshal(preWriteValue)
 			if err != nil {
 				err = errors.Annotatef(err, "prewrite %s Unmarshal failed", preWriteValue)
+				log.Info("breaking")
 				break ForLoop
 			}
 
 			err = s.rewriteForOldVersion(preWrite)
 			if err != nil {
 				err = errors.Annotate(err, "rewrite for old version fail")
+				log.Info("breaking")
 				break ForLoop
 			}
 
@@ -345,6 +354,7 @@ ForLoop:
 			err = s.schema.handlePreviousDDLJobIfNeed(preWrite.SchemaVersion)
 			if err != nil {
 				err = errors.Annotate(err, "handlePreviousDDLJobIfNeed failed")
+				log.Info("breaking")
 				break ForLoop
 			}
 
@@ -352,6 +362,7 @@ ForLoop:
 			ignore, err = filterTable(preWrite, s.filter, s.schema)
 			if err != nil {
 				err = errors.Annotate(err, "filterTable failed")
+				log.Info("breaking")
 				break ForLoop
 			}
 
@@ -362,6 +373,7 @@ ForLoop:
 				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: preWrite})
 				if err != nil {
 					err = errors.Annotate(err, "add to dsyncer failed")
+					log.Info("breaking")
 					break ForLoop
 				}
 				executeHistogram.Observe(time.Since(beginTime).Seconds())
@@ -378,6 +390,7 @@ ForLoop:
 
 			err = s.schema.handlePreviousDDLJobIfNeed(b.job.BinlogInfo.SchemaVersion)
 			if err != nil {
+				log.Info("breaking")
 				return errors.Trace(err)
 			}
 
@@ -385,6 +398,7 @@ ForLoop:
 			var schema, table string
 			schema, table, err = s.schema.getSchemaTableAndDelete(b.job.BinlogInfo.SchemaVersion)
 			if err != nil {
+				log.Info("breaking")
 				return errors.Trace(err)
 			}
 
@@ -402,6 +416,7 @@ ForLoop:
 				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table})
 				if err != nil {
 					err = errors.Annotate(err, "add to dsyncer failed")
+					log.Info("breaking")
 					break ForLoop
 				}
 				executeHistogram.Observe(time.Since(beginTime).Seconds())
@@ -409,8 +424,11 @@ ForLoop:
 		}
 	}
 
+	log.Info("closing fakeBinlogCh")
 	close(fakeBinlogCh)
+	log.Info("closing dsyncer")
 	cerr := s.dsyncer.Close()
+	log.Info("dsyncer is closed")
 	if cerr != nil {
 		log.Error("Failed to close syncer", zap.Error(cerr))
 	}
