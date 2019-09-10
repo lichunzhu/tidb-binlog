@@ -429,9 +429,12 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 }
 
 // Run will quit when meet any error, or all the txn are drained
-func (s *loaderImpl) Run() error {
+func (s *loaderImpl) Run() (err error) {
 	defer func() {
 		log.Info("Run()... in Loader quit")
+		if err != nil {
+			log.Error("error is " + err.Error())
+		}
 		close(s.successTxn)
 	}()
 
@@ -442,21 +445,21 @@ func (s *loaderImpl) Run() error {
 		case txn, ok := <-s.input:
 			if !ok {
 				log.Info("Loader closed, quit running")
-				if err := batch.execAccumulatedDMLs(); err != nil {
+				if err = batch.execAccumulatedDMLs(); err != nil {
 					return errors.Trace(err)
 				}
 				return nil
 			}
 
 			s.metricsInputTxn(txn)
-			if err := batch.put(txn); err != nil {
+			if err = batch.put(txn); err != nil {
 				return errors.Trace(err)
 			}
 
 		default:
 			// execute DMLs ASAP if the `input` channel is empty
 			if len(batch.dmls) > 0 {
-				if err := batch.execAccumulatedDMLs(); err != nil {
+				if err = batch.execAccumulatedDMLs(); err != nil {
 					return errors.Trace(err)
 				}
 
@@ -470,7 +473,7 @@ func (s *loaderImpl) Run() error {
 			}
 
 			s.metricsInputTxn(txn)
-			if err := batch.put(txn); err != nil {
+			if err = batch.put(txn); err != nil {
 				return errors.Trace(err)
 			}
 		}

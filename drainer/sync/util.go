@@ -15,7 +15,10 @@ package sync
 
 import (
 	// mysql driver
+	"time"
+
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/ngaut/log"
 )
 
 // DBConfig is the DB configuration.
@@ -57,8 +60,15 @@ func newBaseError() *baseError {
 func (b *baseError) error() <-chan error {
 	ret := make(chan error, 1)
 	go func() {
-		<-b.errCh
-		ret <- b.err
+		for {
+			select {
+			case <-b.errCh:
+				ret <- b.err
+				return
+			case <-time.After(time.Second * 5):
+				log.Info("Waiting for error occurs")
+			}
+		}
 	}()
 
 	return ret
@@ -66,5 +76,6 @@ func (b *baseError) error() <-chan error {
 
 func (b *baseError) setErr(err error) {
 	b.err = err
+	log.Error("closing b.errch")
 	close(b.errCh)
 }

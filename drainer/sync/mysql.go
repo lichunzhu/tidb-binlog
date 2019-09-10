@@ -117,7 +117,11 @@ func (m *MysqlSyncer) run() {
 	// run loader
 	err := m.loader.Run()
 
+	log.Info("Waiting for success chan quit")
 	wg.Wait()
+	log.Info("Start to close db")
 	m.db.Close()
+	log.Info("Start to set error")
 	m.setErr(err)
+	log.Info("Successfully set the error to dsyncer")
 }

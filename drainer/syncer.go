@@ -294,6 +294,7 @@ ForLoop:
 				fakeBinlogPreAddTS = fakeBinlogPreAddTS[1:]
 			}
 		}
+		log.Info("syncer is syncing binlogs")
 
 		select {
 		case err = <-dsyncError:
