@@ -15,10 +15,7 @@ package sync
 
 import (
 	// mysql driver
-	"time"
-
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/ngaut/log"
 )
 
 // DBConfig is the DB configuration.
@@ -48,36 +45,21 @@ type CheckpointConfig struct {
 
 type baseError struct {
 	err   error
-	errCh chan struct{}
+	errCh chan error
 }
 
 func newBaseError() *baseError {
 	return &baseError{
-		errCh: make(chan struct{}),
+		errCh: make(chan error, 1),
 	}
 }
 
 func (b *baseError) error() <-chan error {
-	ret := make(chan error, 1)
-	go func() {
-		for {
-			select {
-			case <-b.errCh:
-				log.Info("sending error to ret: " + b.err.Error())
-				ret <- b.err
-				log.Info("get error: " + b.err.Error())
-				return
-			case <-time.After(time.Second * 5):
-				log.Info("Waiting for error occurs")
-			}
-		}
-	}()
-
-	return ret
+	return b.errCh
 }
 
 func (b *baseError) setErr(err error) {
 	b.err = err
-	log.Error("closing b.errch")
+	b.errCh <- err
 	close(b.errCh)
 }

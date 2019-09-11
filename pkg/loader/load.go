@@ -436,6 +436,18 @@ func (s *loaderImpl) Run() (err error) {
 			log.Error("error is " + err.Error())
 		}
 		close(s.successTxn)
+		go func() {
+			for {
+				select {
+				case _, ok := <-s.input:
+					if !ok {
+						return
+					}
+				case <-s.ctx.Done():
+					return
+				}
+			}
+		}()
 	}()
 
 	batch := fNewBatchManager(s)
